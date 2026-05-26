@@ -278,6 +278,14 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 
     _adapter = peripheral;
     _adapter.delegate = self;
+    // Remove the now-promoted peripheral from the candidate pool. The
+    // old code left the same peripheral in both _adapter and
+    // _possibleAdapters, so disconnect later issued
+    // cancelPeripheralConnection twice on the same CBPeripheral —
+    // CoreBluetooth ends up in an internal state where subsequent
+    // connects to the same identifier are silently dropped, and the
+    // user needs to toggle Bluetooth to recover.
+    [_possibleAdapters removeObject:peripheral];
     if ( _manager.isScanning )
     {
         [_manager stopScan];
