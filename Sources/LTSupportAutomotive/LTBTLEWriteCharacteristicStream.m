@@ -16,7 +16,14 @@
 
 -(instancetype)initToCharacteristic:(CBCharacteristic*)characteristic
 {
-    NSAssert( characteristic.properties & CBCharacteristicPropertyWrite, @"Characteristic has to offer the write property" );
+    // Either Write or WriteWithoutResponse is acceptable; the actual
+    // write call selects the type matching what's advertised. Reject
+    // characteristics that offer neither so we fail fast instead of
+    // silently no-oping on writeValue:forCharacteristic:.
+    NSAssert(
+        characteristic.properties & ( CBCharacteristicPropertyWrite | CBCharacteristicPropertyWriteWithoutResponse ),
+        @"Characteristic has to offer at least one write property"
+    );
 
     if ( ! ( self = [super init] ) )
     {
@@ -101,10 +108,29 @@
         return -1;
     }
 
-    NSUInteger maxWriteForCharacteristic = [_characteristic.service.peripheral maximumWriteValueLengthForType:CBCharacteristicWriteWithResponse];
+    // Prefer .withResponse when the characteristic advertises it (the
+    // delivery callback we already wire up gives us reliable
+    // characteristicDidWriteValue events). Fall back to
+    // .withoutResponse for adapters that only support that. Previously
+    // .withResponse was always used, which silently failed on
+    // writeWithoutResponse-only adapters.
+    CBCharacteristicWriteType writeType =
+        ( _characteristic.properties & CBCharacteristicPropertyWrite )
+            ? CBCharacteristicWriteWithResponse
+            : CBCharacteristicWriteWithoutResponse;
+    NSUInteger maxWriteForCharacteristic = [_characteristic.service.peripheral maximumWriteValueLengthForType:writeType];
     NSUInteger lengthToWrite = MIN( len, maxWriteForCharacteristic );
     NSData* value = [NSData dataWithBytes:buffer length:lengthToWrite];
-    [_characteristic.service.peripheral writeValue:value forCharacteristic:_characteristic type:CBCharacteristicWriteWithResponse];
+    [_characteristic.service.peripheral writeValue:value forCharacteristic:_characteristic type:writeType];
+
+    // writeWithoutResponse never fires didWriteValueForCharacteristic,
+    // so synthesize the HasSpaceAvailable signal that the stream
+    // consumer expects after every successful enqueue.
+    if ( writeType == CBCharacteristicWriteWithoutResponse )
+    {
+        [self characteristicDidWriteValue];
+    }
+
     return lengthToWrite;
 }
 

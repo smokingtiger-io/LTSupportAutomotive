@@ -283,8 +283,15 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
         [_manager stopScan];
     }
 
-    CBService* atCommChannel = peripheral.services.firstObject;
-    [peripheral discoverCharacteristics:nil forService:atCommChannel];
+    // Iterate every service the peripheral exposed, not just the first
+    // one. Several real ELM-class adapters (VGate iCar Pro firmware
+    // variants, some OBDLink BLE adapters) advertise multiple services
+    // where read/write live in different services — only inspecting
+    // services.firstObject made those adapters look "incompatible".
+    for ( CBService* service in peripheral.services )
+    {
+        [peripheral discoverCharacteristics:nil forService:service];
+    }
 }
 
 -(void)peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(NSError *)error
@@ -300,11 +307,34 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
             [peripheral setNotifyValue:YES forCharacteristic:characteristic];
         }
 
-        if ( characteristic.properties & CBCharacteristicPropertyWrite )
+        // Accept either Write (with response) or WriteWithoutResponse —
+        // a non-trivial subset of BLE OBD adapters expose only the
+        // latter. The actual writeValue:type: call selects the matching
+        // type, see LTBTLEWriteCharacteristicStream.
+        if ( characteristic.properties & ( CBCharacteristicPropertyWrite | CBCharacteristicPropertyWriteWithoutResponse ) )
         {
             LOG( @"Did see write characteristic" );
             _writer = characteristic;
         }
+    }
+
+    // Wait until all requested services have reported back before
+    // deciding success/failure. With multiple services in flight we'd
+    // otherwise call connectionAttemptFailed after the first service's
+    // characteristics arrive even though a later service still has
+    // pending discovery.
+    BOOL anyServicePending = NO;
+    for ( CBService* svc in peripheral.services )
+    {
+        if ( svc.characteristics == nil )
+        {
+            anyServicePending = YES;
+            break;
+        }
+    }
+    if ( anyServicePending )
+    {
+        return;
     }
 
     if ( _reader && _writer )
