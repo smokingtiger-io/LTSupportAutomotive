@@ -102,6 +102,10 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
     LTOBD2Protocol* _adapterProtocol;
     NSTimer* _heartbeatTimer;
+    // Per-command timeout uses a dispatch source rather than NSTimer so
+    // it fires on _dispatchQueue (same context that mutates _commandQueue
+    // and _hasPendingAnswer) and we don't depend on caller-runloop state.
+    dispatch_source_t _commandTimeoutSource;
 
     // debugging
     NSFileHandle* _logFile;
@@ -131,6 +135,7 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     _dispatchQueue = dispatch_queue_create( [self.description cStringUsingEncoding:NSUTF8StringEncoding], DISPATCH_QUEUE_SERIAL );
 
     _adapterState = OBD2AdapterStateUnknown;
+    _commandTimeout = 5.0;
 
     return self;
 }
@@ -211,6 +216,8 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 {
     [_heartbeatTimer invalidate];
     _heartbeatTimer = nil;
+
+    [self cancelCommandTimeoutTimer];
 
     [_inputStream close];
     _inputStream = nil;
@@ -385,6 +392,8 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
 -(void)responseCompleted:(NSArray<NSString*>*)lines
 {
+    [self cancelCommandTimeoutTimer];
+
     [[NSNotificationCenter defaultCenter] postNotificationName:LTOBD2AdapterDidReceive object:self];
 
     if ( !_hasPendingAnswer )
@@ -513,8 +522,54 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
 -(void)onTimerFired:(NSTimer*)timer
 {
-    XLOG( @"COMMAND TIMEOUT: %@", _commandQueue.firstObject );
-    //FIXME: What now?
+    // Legacy stub retained for binary compatibility — the actual command
+    // timeout is now driven by the dispatch source set up in
+    // startCommandTimeoutTimer (see handleCommandTimeout).
+}
+
+#pragma mark -
+#pragma mark Command Timeout
+
+-(void)startCommandTimeoutTimer
+{
+    [self cancelCommandTimeoutTimer];
+    if ( _commandTimeout <= 0 )
+    {
+        return;
+    }
+
+    _commandTimeoutSource = dispatch_source_create( DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _dispatchQueue );
+    dispatch_source_set_timer( _commandTimeoutSource,
+                               dispatch_time( DISPATCH_TIME_NOW, (int64_t)(_commandTimeout * NSEC_PER_SEC) ),
+                               DISPATCH_TIME_FOREVER,
+                               (uint64_t)(0.1 * NSEC_PER_SEC) );
+    __weak typeof(self) weakSelf = self;
+    dispatch_source_set_event_handler( _commandTimeoutSource, ^{
+        [weakSelf handleCommandTimeout];
+    });
+    dispatch_resume( _commandTimeoutSource );
+}
+
+-(void)cancelCommandTimeoutTimer
+{
+    if ( _commandTimeoutSource )
+    {
+        dispatch_source_cancel( _commandTimeoutSource );
+        _commandTimeoutSource = nil;
+    }
+}
+
+-(void)handleCommandTimeout
+{
+    if ( !_hasPendingAnswer )
+    {
+        return;
+    }
+    XLOG( @"COMMAND TIMEOUT (%.1fs): %@", _commandTimeout, _commandQueue.firstObject );
+    // Synthesize the same path a real NO DATA response would take so
+    // existing callers (ELM327 protocol-detection loop, generic command
+    // handlers) see a defined outcome instead of hanging.
+    [self responseCompleted:@[ @"NO DATA" ]];
 }
 
 #pragma mark -
@@ -652,6 +707,7 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     {
         [internalCommand commandSent];
         [[NSNotificationCenter defaultCenter] postNotificationName:LTOBD2AdapterDidSend object:self];
+        [self startCommandTimeoutTimer];
     }
 }
 

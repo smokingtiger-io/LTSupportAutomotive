@@ -62,6 +62,11 @@ extern NSString* const LTOBD2AdapterDidReceive;
 
 // configuration
 @property(assign,nonatomic,readwrite) NSTimeInterval nextCommandDelay;
+// Per-command response timeout. Default 5.0 s; set to 0 to disable.
+// On timeout the in-flight command receives a synthesized `@[@"NO DATA"]`
+// result so the queue advances and existing fallback logic (e.g., slow
+// protocol probing) keeps progressing instead of hanging forever.
+@property(assign,nonatomic,readwrite) NSTimeInterval commandTimeout;
 
 // lifecycle
 +(nullable instancetype)adapterWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream;
