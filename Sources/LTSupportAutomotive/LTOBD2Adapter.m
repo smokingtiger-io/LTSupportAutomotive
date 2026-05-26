@@ -372,17 +372,29 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
         // This cancels all but the first command in order to prevent sending a new command while
         // the response to an active command is still pending. OBD2 adapters usually can't cope with
         // that and emit a 'STOPPED' response in that case.
+        NSArray<LTOBD2AdapterInternalCommand*>* cancelled;
         if ( self->_hasPendingAnswer )
         {
             if ( self->_commandQueue.count > 1 )
             {
                 NSRange allButTheFirst = NSMakeRange( 1, self->_commandQueue.count - 1 );
+                cancelled = [self->_commandQueue subarrayWithRange:allButTheFirst];
                 [self->_commandQueue removeObjectsInRange:allButTheFirst];
             }
         }
         else
         {
+            cancelled = [self->_commandQueue copy];
             [self->_commandQueue removeAllObjects];
+        }
+        // Wake every cancelled command's response handler with a NO
+        // DATA completion so async wrappers (Swift continuations, etc.)
+        // resolve instead of leaking. The handler is dispatched on the
+        // _dispatchQueue but the implementation already marshals work
+        // to the caller's preferred context if needed.
+        for ( LTOBD2AdapterInternalCommand* ic in cancelled )
+        {
+            [ic didCompleteResponse:@[ RESPONSE_FINAL_NODATA ] protocol:nil protocolType:OBD2VehicleProtocolUnknown];
         }
     });
 }
