@@ -77,7 +77,43 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 {
     _connectionBlock = block;
 
+    // Re-use the existing CBCentralManager when the caller invokes
+    // connectWithBlock: more than once (typical after a failed first
+    // connect and a retry). Allocating a new manager each time leaks
+    // the previous instance and leaves its in-flight scan/connect
+    // operations alive in CoreBluetooth — over time the system starts
+    // throttling our BLE access. If a manager already exists and is
+    // powered on, jump straight back into the discovery path.
+    if ( _manager )
+    {
+        [self resetTransientStateForReconnect];
+        if ( _manager.state == CBManagerStatePoweredOn )
+        {
+            [self centralManagerDidUpdateState:_manager];
+        }
+        return;
+    }
+
     _manager = [[CBCentralManager alloc] initWithDelegate:self queue:_dispatchQueue options:nil];
+}
+
+-(void)resetTransientStateForReconnect
+{
+    if ( _manager.isScanning )
+    {
+        [_manager stopScan];
+    }
+    if ( _adapter )
+    {
+        [_manager cancelPeripheralConnection:_adapter];
+        _adapter = nil;
+    }
+    [_possibleAdapters enumerateObjectsUsingBlock:^(CBPeripheral * _Nonnull peripheral, NSUInteger idx, BOOL * _Nonnull stop) {
+        [self->_manager cancelPeripheralConnection:peripheral];
+    }];
+    [_possibleAdapters removeAllObjects];
+    _reader = nil;
+    _writer = nil;
 }
 
 -(void)disconnect
