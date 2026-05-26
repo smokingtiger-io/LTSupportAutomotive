@@ -116,7 +116,24 @@
                     }
                 }
                 self->_version = candidate ?: response.lastObject;
-                if ( [self->_version isEqualToString:@"NO DATA"] || ![self->_version containsString:@" "] )
+                // The previous "must contain a space" check rejected clone
+                // banners like "ELM327v1.5" that omit the separator. Accept
+                // any banner that mentions ELM (case-insensitive) or that
+                // matches a vN.M style version literal — both formats are
+                // observed across genuine and clone firmwares.
+                NSString* upper = self->_version.uppercaseString;
+                BOOL looksLikeELM = [upper containsString:@"ELM"];
+                BOOL looksLikeVersion = NO;
+                if ( !looksLikeELM )
+                {
+                    NSRange vRange = [upper rangeOfString:@"V"];
+                    if ( vRange.location != NSNotFound && vRange.location + 1 < upper.length )
+                    {
+                        unichar nextChar = [upper characterAtIndex:vRange.location + 1];
+                        looksLikeVersion = ( nextChar >= '0' && nextChar <= '9' );
+                    }
+                }
+                if ( [self->_version isEqualToString:@"NO DATA"] || ( !looksLikeELM && !looksLikeVersion ) )
                 {
                     WARN( @"Did not find expected ELM327 identification response. Got %@ instead", self->_version );
                     [self advanceAdapterStateTo:OBD2AdapterStateError];
