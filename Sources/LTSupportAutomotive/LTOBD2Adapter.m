@@ -329,18 +329,28 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
 -(void)cancelPendingCommands
 {
-    // This cancels all but the first command in order to prevent sending a new command while
-    // the response to an active command is still pending. OBD2 adapters usually can't cope with
-    // that and emit a 'STOPPED' response in that case.
-    if ( _hasPendingAnswer )
-    {
-        NSRange allButTheFirst = NSMakeRange( 1, _commandQueue.count - 1 );
-        [_commandQueue removeObjectsInRange:allButTheFirst];
-    }
-    else
-    {
-        [_commandQueue removeAllObjects];
-    }
+    // Marshalling onto _dispatchQueue keeps _commandQueue mutations
+    // exclusive with the rest of the command pipeline. Without this,
+    // a caller invoking cancelPendingCommands from the UI thread could
+    // race with asyncProcessCommandQueue or responseCompleted: and
+    // corrupt the underlying NSMutableArray.
+    dispatch_async( _dispatchQueue, ^{
+        // This cancels all but the first command in order to prevent sending a new command while
+        // the response to an active command is still pending. OBD2 adapters usually can't cope with
+        // that and emit a 'STOPPED' response in that case.
+        if ( self->_hasPendingAnswer )
+        {
+            if ( self->_commandQueue.count > 1 )
+            {
+                NSRange allButTheFirst = NSMakeRange( 1, self->_commandQueue.count - 1 );
+                [self->_commandQueue removeObjectsInRange:allButTheFirst];
+            }
+        }
+        else
+        {
+            [self->_commandQueue removeAllObjects];
+        }
+    });
 }
 
 #pragma mark -
@@ -653,12 +663,18 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
         {
             case NSStreamEventHasBytesAvailable:
             {
+                // Reading must happen on the stream's runloop thread; mutation
+                // of _commandQueue / _hasPendingAnswer happens on
+                // _dispatchQueue. Bridge the two by copying the bytes here
+                // and dispatching the parse path to the serial queue.
                 uint8_t buffer[1024];
-                NSInteger numRead = [_inputStream read:(uint8_t*)&buffer maxLength:sizeof(buffer)];
+                NSInteger numRead = [_inputStream read:buffer maxLength:sizeof(buffer)];
                 if ( numRead > 0 )
                 {
-                    NSData* data = [NSData dataWithBytes:&buffer length:numRead];
-                    [self inputReadBytes:data];
+                    NSData* data = [NSData dataWithBytes:buffer length:numRead];
+                    dispatch_async( _dispatchQueue, ^{
+                        [self inputReadBytes:data];
+                    });
                 }
                 // NOTE: Reading 0 bytes from an NSInputStream will automatically trigger an NSStreamEventEndEncountered
                 break;
@@ -666,14 +682,18 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
             case NSStreamEventEndEncountered:
             {
-                [self advanceAdapterStateTo:OBD2AdapterStateGone];
+                dispatch_async( _dispatchQueue, ^{
+                    [self advanceAdapterStateTo:OBD2AdapterStateGone];
+                });
                 break;
             }
 
             case NSStreamEventErrorOccurred:
             {
                 ERROR( @"stream %@ error %@", stream, stream.streamError );
-                [self advanceAdapterStateTo:OBD2AdapterStateError];
+                dispatch_async( _dispatchQueue, ^{
+                    [self advanceAdapterStateTo:OBD2AdapterStateError];
+                });
                 break;
             }
 
@@ -689,14 +709,21 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
             {
                 if ( _adapterState == OBD2AdapterStateDiscovering )
                 {
-                    [self advanceAdapterStateTo:OBD2AdapterStatePresent];
+                    dispatch_async( _dispatchQueue, ^{
+                        if ( self->_adapterState == OBD2AdapterStateDiscovering )
+                        {
+                            [self advanceAdapterStateTo:OBD2AdapterStatePresent];
+                        }
+                    });
                 }
                 break;
             }
 
             case NSStreamEventErrorOccurred:
             {
-                [self advanceAdapterStateTo:OBD2AdapterStateError];
+                dispatch_async( _dispatchQueue, ^{
+                    [self advanceAdapterStateTo:OBD2AdapterStateError];
+                });
                 break;
             }
 
