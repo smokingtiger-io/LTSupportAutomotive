@@ -307,7 +307,10 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     LTOBD2Command* command = [LTOBD2Command commandWithRawString:rawString];
     [self transmitCommand:command responseHandler:^(LTOBD2Command * _Nonnull command) {
 
-        handler( command.rawResponse );
+        if ( handler )
+        {
+            handler( command.rawResponse );
+        }
 
     }];
 }
@@ -336,12 +339,22 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 {
     if ( !commands.count )
     {
+        // Preserve completion semantics: callers awaiting batch
+        // completion should be woken with the (empty) commands array
+        // rather than left hanging on an empty input.
+        if ( handler )
+        {
+            handler( commands );
+        }
         return;
     }
 
     [commands enumerateObjectsUsingBlock:^(LTOBD2Command * _Nonnull command, NSUInteger idx, BOOL * _Nonnull stop) {
         LTOBD2CommandResponseHandler commandHandler = ( idx < commands.count - 1 ) ? nil : ^(LTOBD2Command* command ){
-            handler( commands );
+            if ( handler )
+            {
+                handler( commands );
+            }
         };
         [self transmitCommand:command responseHandler:commandHandler];
     }];
@@ -820,7 +833,10 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     if ( internalCommand.command.class == LTOBD2DummyCommand.class )
     {
         [_commandQueue removeObject:internalCommand];
-        internalCommand.responseHandler( internalCommand.command );
+        if ( internalCommand.responseHandler )
+        {
+            internalCommand.responseHandler( internalCommand.command );
+        }
         return;
     }
 
