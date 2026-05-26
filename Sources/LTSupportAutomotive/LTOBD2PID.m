@@ -1358,11 +1358,14 @@
         return OBD2_NO_DATA;
     }
 
-    signed char A = bytes[0].charValue;
-    signed char B = bytes[0].charValue;
-    int value = (1 / 4.0) * A * 256 + B;
+    // Spec: ((A*256) + B) / 4 Pa, interpreted as a signed 16-bit value
+    // so negative pressures (vacuum) are reported correctly.
+    uint8_t A = bytes[0].unsignedCharValue;
+    uint8_t B = bytes[1].unsignedCharValue;
+    int16_t raw = (int16_t)( ( A << 8 ) | B );
+    double pa = raw / 4.0;
 
-    return [NSString stringWithFormat:@"%d" UTF8_NARROW_NOBREAK_SPACE @"Pa", value];
+    return [NSString stringWithFormat:@"%.2f" UTF8_NARROW_NOBREAK_SPACE @"Pa", pa];
 }
 
 @end
