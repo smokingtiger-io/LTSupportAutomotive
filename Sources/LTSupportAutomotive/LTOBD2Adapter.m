@@ -201,10 +201,47 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 #pragma mark -
 #pragma mark Connection Handling
 
+// Shared background NSThread that owns a running runloop. NSStream
+// callbacks need a runloop, and the legacy code used
+// `[NSRunLoop currentRunLoop]` — which broke whenever `connect` was
+// invoked from a thread without one (Swift Task contexts, GCD blocks,
+// etc.). Routing every stream schedule onto this dedicated thread gives
+// us a predictable delivery context regardless of the caller.
++(NSThread*)sharedStreamThread
+{
+    static NSThread* thread;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        thread = [[NSThread alloc] initWithBlock:^{
+            // Empty mach port keeps the runloop from exiting when no
+            // sources are scheduled (e.g., between connect and disconnect).
+            [[NSRunLoop currentRunLoop] addPort:[NSMachPort port] forMode:NSDefaultRunLoopMode];
+            while ( ![NSThread currentThread].isCancelled )
+            {
+                @autoreleasepool {
+                    [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantFuture]];
+                }
+            }
+        }];
+        thread.name = @"LTSupportAutomotive.StreamRunloop";
+        thread.qualityOfService = NSQualityOfServiceUserInitiated;
+        [thread start];
+    });
+    return thread;
+}
+
 -(void)connect
 {
     [self advanceAdapterStateTo:OBD2AdapterStateDiscovering];
 
+    [self performSelector:@selector(scheduleStreamsOnSharedRunloop)
+                 onThread:[LTOBD2Adapter sharedStreamThread]
+               withObject:nil
+            waitUntilDone:NO];
+}
+
+-(void)scheduleStreamsOnSharedRunloop
+{
     [_inputStream scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
     [_outputStream scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
 
@@ -219,13 +256,27 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
     [self cancelCommandTimeoutTimer];
 
-    [_inputStream close];
+    // Unschedule on the same shared thread the streams were scheduled on
+    // to avoid the assertion CFRunLoop logs when releasing a stream
+    // from a different runloop than the one it was attached to.
+    [self performSelector:@selector(unscheduleStreamsOnSharedRunloop)
+                 onThread:[LTOBD2Adapter sharedStreamThread]
+               withObject:nil
+            waitUntilDone:NO];
+
     _inputStream = nil;
-    [_outputStream close];
     _outputStream = nil;
 
     [_logFile closeFile];
     _logFile = nil;
+}
+
+-(void)unscheduleStreamsOnSharedRunloop
+{
+    [_inputStream close];
+    [_inputStream removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+    [_outputStream close];
+    [_outputStream removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
 }
 
 #pragma mark -
