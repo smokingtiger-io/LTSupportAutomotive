@@ -35,6 +35,10 @@ let package = Package(
             cSettings: [
                 .headerSearchPath("privateInclude")
             ]
+        ),
+        .testTarget(
+            name: "LTSupportAutomotiveTests",
+            dependencies: ["LTSupportAutomotive"]
         )
     ]
 )

@@ -75,6 +75,12 @@
 
 -(NSArray<NSNumber*>*)hexStringToArrayOfNumbers:(NSString*)string
 {
+    if ( string.length == 0 )
+    {
+        // Avoid NSUInteger underflow in the normalization loop below;
+        // an empty line has nothing to parse anyway.
+        return @[];
+    }
     // Normalize string input to contain spaces. This transforms an input string like
     // "7E80641010007E500" to "7E8 06 41 01 00 07 E5 00".
     if ( ! [string containsString:@" "] )
@@ -115,6 +121,10 @@
 
 -(LTOBD2ProtocolResult*)createProtocolResultForBytes:(NSArray<NSNumber*>*)bytes sidIndex:(NSUInteger)sidIndex
 {
+    if ( sidIndex >= bytes.count )
+    {
+        return [LTOBD2ProtocolResult protocolResultFailureType:OBD2FailureTypeInternalUnknown];
+    }
     uint sid = bytes[sidIndex].unsignedIntValue;
     if ( sid != OBD2FailureCode )
     {
