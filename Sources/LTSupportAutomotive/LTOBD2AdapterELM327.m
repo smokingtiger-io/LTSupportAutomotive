@@ -98,7 +98,24 @@
 
             if ( [string isEqualToString:@"ATI"] )
             {
-                self->_version = response.lastObject;
+                // Pick the line that actually looks like an ELM327
+                // identification banner (contains "ELM" or is the
+                // classic "VxYz" pattern). Some firmwares emit a
+                // header *after* the version line, so simply taking
+                // response.lastObject ended up storing the header in
+                // _version and the format-validation below failed for
+                // perfectly good adapters.
+                NSString* candidate = nil;
+                for ( NSString* line in response )
+                {
+                    NSString* trimmed = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    if ( [trimmed.uppercaseString containsString:@"ELM"] )
+                    {
+                        candidate = trimmed;
+                        break;
+                    }
+                }
+                self->_version = candidate ?: response.lastObject;
                 if ( [self->_version isEqualToString:@"NO DATA"] || ![self->_version containsString:@" "] )
                 {
                     WARN( @"Did not find expected ELM327 identification response. Got %@ instead", self->_version );

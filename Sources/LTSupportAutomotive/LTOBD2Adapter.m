@@ -136,6 +136,7 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
     _adapterState = OBD2AdapterStateUnknown;
     _commandTimeout = 5.0;
+    _heartbeatInterval = 4.5;
 
     return self;
 }
@@ -685,6 +686,11 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
                 // _dispatchQueue. Bridge the two by copying the bytes here
                 // and dispatching the parse path to the serial queue.
                 uint8_t buffer[1024];
+                // Plain `buffer` decays to the same pointer the `&buffer`
+                // form produced under implicit casts, but the latter
+                // had the wrong static type (uint8_t (*)[1024]). Use
+                // the natural decay so the read pointer matches the
+                // declared parameter type.
                 NSInteger numRead = [_inputStream read:buffer maxLength:sizeof(buffer)];
                 if ( numRead > 0 )
                 {
@@ -779,9 +785,10 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     // call this path twice without an intervening disconnect) before
     // creating the new one — without that guard we'd leak the prior
     // timer and double the heartbeat rate.
+    NSTimeInterval interval = _heartbeatInterval > 0 ? _heartbeatInterval : 4.5;
     dispatch_async( dispatch_get_main_queue(), ^{
         [self->_heartbeatTimer invalidate];
-        self->_heartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:4.5 target:self selector:@selector(sendHeartbeatCommand:) userInfo:nil repeats:YES];
+        self->_heartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:interval target:self selector:@selector(sendHeartbeatCommand:) userInfo:nil repeats:YES];
     });
 }
 

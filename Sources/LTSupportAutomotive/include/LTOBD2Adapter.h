@@ -67,6 +67,12 @@ extern NSString* const LTOBD2AdapterDidReceive;
 // result so the queue advances and existing fallback logic (e.g., slow
 // protocol probing) keeps progressing instead of hanging forever.
 @property(assign,nonatomic,readwrite) NSTimeInterval commandTimeout;
+// Heartbeat ping interval, in seconds. Applies only when the active
+// protocol exposes a heartbeat command. Default 4.5 s — short enough
+// to keep most ELM-class adapters out of sleep, long enough to leave
+// headroom for normal polling. Adapters with shorter sleep timers can
+// lower this; older slow adapters may benefit from raising it.
+@property(assign,nonatomic,readwrite) NSTimeInterval heartbeatInterval;
 
 // lifecycle
 +(nullable instancetype)adapterWithInputStream:(NSInputStream*)inputStream outputStream:(NSOutputStream*)outputStream;
@@ -81,9 +87,14 @@ extern NSString* const LTOBD2AdapterDidReceive;
 // command handling
 -(void)transmitRawString:(NSString*)command responseHandler:(nullable LTOBD2RawResponseHandler)handler;
 -(void)transmitCommand:(LTOBD2Command*)command responseHandler:(nullable LTOBD2CommandResponseHandler)handler;
-// response handler getting called for every response
+// Submits every command in `commands` separately. `handler` is invoked
+// once per command (N times total) with that individual command as
+// argument — useful when each result needs to be processed
+// independently as it lands.
 -(void)transmitMultipleCommands:(NSArray<LTOBD2Command*>*)commands responseHandler:(nullable LTOBD2CommandResponseHandler)handler;
-// completion handler getting called for the last response
+// Submits every command in `commands` separately. `handler` is invoked
+// exactly once, after the LAST command's response lands, with the full
+// `commands` array — useful for "send batch, then do something" flows.
 -(void)transmitMultipleCommands:(NSArray<LTOBD2Command*>*)commands completionHandler:(nullable LTOBD2MultipleCommandsResponseHandler)handler;
 -(void)cancelPendingCommands;
 

@@ -28,10 +28,18 @@ NS_ASSUME_NONNULL_END
     #define UTF8_NARROW_NOBREAK_SPACE @"\u202F"
 #endif
 
+// Severity-tagged log macros. Distinguishing WARN/ERROR from LOG used
+// to be impossible because both expanded to the same MyNSLog call.
+// Now the format string is prefixed at compile time via NSString
+// literal concatenation so output is greppable and oslog filtering
+// can pick on the tag. All call sites in the library pass an NSString
+// literal as the first argument; if a caller ever passes a runtime
+// string, the concatenation would fail at compile time, which is the
+// signal to migrate that site to LOG.
 #ifndef WARN
-#define WARN LOG
+#define WARN(...) MyNSLog( __FILE__, __LINE__, __PRETTY_FUNCTION__, @"[WARN] " __VA_ARGS__ )
 #endif
 
 #ifndef ERROR
-#define ERROR LOG
+#define ERROR(...) MyNSLog( __FILE__, __LINE__, __PRETTY_FUNCTION__, @"[ERROR] " __VA_ARGS__ )
 #endif

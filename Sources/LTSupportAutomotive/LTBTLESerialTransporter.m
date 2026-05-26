@@ -135,15 +135,24 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 
 -(void)startUpdatingSignalStrengthWithInterval:(NSTimeInterval)interval
 {
-    [self stopUpdatingSignalStrength];
-
-    _signalStrengthUpdateTimer = [NSTimer scheduledTimerWithTimeInterval:interval target:self selector:@selector(onSignalStrengthUpdateTimerFired:) userInfo:nil repeats:YES];
+    // NSTimer is scheduled onto the current runloop, so this method only
+    // worked previously when callers happened to invoke it from the
+    // main thread. Marshal explicitly to the main queue so the timer
+    // always lands on a runloop that is actually running.
+    dispatch_async( dispatch_get_main_queue(), ^{
+        [self->_signalStrengthUpdateTimer invalidate];
+        self->_signalStrengthUpdateTimer = [NSTimer scheduledTimerWithTimeInterval:interval target:self selector:@selector(onSignalStrengthUpdateTimerFired:) userInfo:nil repeats:YES];
+    });
 }
 
 -(void)stopUpdatingSignalStrength
 {
-    [_signalStrengthUpdateTimer invalidate];
-    _signalStrengthUpdateTimer = nil;
+    // Match the schedule context: invalidate must run on the runloop
+    // that scheduled the timer (main).
+    dispatch_async( dispatch_get_main_queue(), ^{
+        [self->_signalStrengthUpdateTimer invalidate];
+        self->_signalStrengthUpdateTimer = nil;
+    });
 }
 
 #pragma mark -
