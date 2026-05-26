@@ -242,21 +242,26 @@
     [whitespaceNewlineAndPrompt addCharactersInString:@">"];
     NSString* receivedStringWithoutTermination = [receivedString stringByTrimmingCharactersInSet:whitespaceNewlineAndPrompt];
 
-    NSMutableArray<NSString*>* ma = [NSMutableArray array];
-    __block NSInteger idx = -1;
+    // Collect all non-empty lines first, then strip invalid PID lines
+    // except the last one. The previous single-pass guard compared idx
+    // against ma.count, which was always equal at this point in the
+    // loop, so the invalid-line filter never triggered and echo/noise
+    // lines from clone adapters flowed straight into the parser.
+    NSMutableArray<NSString*>* allLines = [NSMutableArray array];
     [receivedStringWithoutTermination enumerateLinesUsingBlock:^(NSString * _Nonnull line, BOOL * _Nonnull stop) {
-
-        idx++;
-        if ( line.length < 1 )
+        if ( line.length > 0 )
         {
-            return;
+            [allLines addObject:line];
         }
-        if ( idx < ma.count && ! [self isValidPidLine:line] )
-        {
-            return;
-        }
-        [ma addObject:line];
+    }];
 
+    NSMutableArray<NSString*>* ma = [NSMutableArray arrayWithCapacity:allLines.count];
+    NSUInteger lastIndex = allLines.count > 0 ? allLines.count - 1 : 0;
+    [allLines enumerateObjectsUsingBlock:^(NSString * _Nonnull line, NSUInteger idx, BOOL * _Nonnull stop) {
+        if ( idx == lastIndex || [self isValidPidLine:line] )
+        {
+            [ma addObject:line];
+        }
     }];
 
     [self responseCompleted:ma];
