@@ -107,7 +107,14 @@
                 }
             }
 
-            if ( string == init0.lastObject )
+            // Use string equality rather than pointer equality. NSString
+            // literal interning happens to make `==` work today (both
+            // refer to the same literal in the same compilation unit),
+            // but any future change that moves the init sequence
+            // assembly into a helper or constructs the last string at
+            // runtime would silently start matching nothing — and the
+            // initialization completion handler would never run.
+            if ( [string isEqualToString:init0.lastObject] )
             {
                 if ( [response.lastObject isEqualToString:@"OK"] )
                 {
