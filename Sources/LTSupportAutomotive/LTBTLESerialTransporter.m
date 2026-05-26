@@ -152,6 +152,15 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 
 -(void)startUpdatingSignalStrengthWithInterval:(NSTimeInterval)interval
 {
+    // NSTimer with a non-positive interval fires as fast as the runloop
+    // can dispatch, which would saturate main and serve no purpose.
+    // Reject the call instead — callers that genuinely want polling
+    // should pick a positive cadence.
+    if ( interval <= 0 )
+    {
+        LOG( @"Refusing to start signal strength timer with non-positive interval %f", interval );
+        return;
+    }
     // NSTimer is scheduled onto the current runloop, so this method only
     // worked previously when callers happened to invoke it from the
     // main thread. Marshal explicitly to the main queue so the timer
