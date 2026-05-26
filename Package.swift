@@ -27,6 +27,11 @@ let package = Package(
             name: "LTSupportAutomotive",
             dependencies: [],
             exclude: ["Resources/Info.plist"],
+            // Bundles PrivacyInfo.xcprivacy into the framework so the
+            // iOS 17 App Store metadata pipeline picks it up automatically.
+            resources: [
+                .copy("PrivacyInfo.xcprivacy")
+            ],
             cSettings: [
                 .headerSearchPath("privateInclude")
             ]
