@@ -175,6 +175,16 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 {
     if ( central.state != CBManagerStatePoweredOn )
     {
+        // Anything other than PoweredOn (Unauthorized, Unsupported,
+        // PoweredOff, Resetting, Unknown) means the manager will not
+        // deliver a peripheral. Wake the caller now so they don't
+        // wait forever for a connection that cannot happen.
+        if ( central.state == CBManagerStateUnauthorized
+          || central.state == CBManagerStateUnsupported
+          || central.state == CBManagerStatePoweredOff )
+        {
+            [self connectionAttemptFailed];
+        }
         return;
     }
     NSArray<CBPeripheral*>* peripherals = [_manager retrieveConnectedPeripheralsWithServices:_serviceUUIDs];
@@ -235,6 +245,14 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 -(void)centralManager:(CBCentralManager *)central didFailToConnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error
 {
     LOG( @"Failed to connect %@: %@", peripheral, error );
+    [_possibleAdapters removeObject:peripheral];
+    // Only abandon the attempt when there are no more candidates
+    // queued; otherwise let the remaining peripherals decide success
+    // or failure via the discovery delegate path.
+    if ( _possibleAdapters.count == 0 && _adapter == nil )
+    {
+        [self connectionAttemptFailed];
+    }
 }
 
 -(void)centralManager:(CBCentralManager *)central didDisconnectPeripheral:(CBPeripheral *)peripheral error:(NSError *)error
@@ -273,6 +291,12 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
     if ( error )
     {
         LOG( @"Could not discover services: %@", error );
+        [_manager cancelPeripheralConnection:peripheral];
+        [_possibleAdapters removeObject:peripheral];
+        if ( _possibleAdapters.count == 0 && _adapter == nil )
+        {
+            [self connectionAttemptFailed];
+        }
         return;
     }
 
@@ -282,6 +306,10 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 
         [_manager cancelPeripheralConnection:peripheral];
         [_possibleAdapters removeObject:peripheral];
+        if ( _possibleAdapters.count == 0 && _adapter == nil )
+        {
+            [self connectionAttemptFailed];
+        }
         return;
     }
 
@@ -405,6 +433,10 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 
 -(void)connectionAttemptFailed
 {
+    if ( !_connectionBlock )
+    {
+        return;
+    }
     _connectionBlock( nil, nil );
     _connectionBlock = nil;
 }
