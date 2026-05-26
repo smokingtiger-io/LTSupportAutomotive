@@ -77,6 +77,14 @@
         // </Horrible Hack for Mode 6 which is sending multiline answers without multiline header indication>
 
         NSUInteger payloadIndex = headerLength + numberOfBytesInCommand + multiFrameCorrective;
+        // bytesInLine.count must accommodate payloadIndex AND the
+        // trailing checksum byte; otherwise the unsigned subtraction
+        // wraps and subarrayWithRange: faults.
+        if ( payloadIndex + 1 > bytesInLine.count )
+        {
+            WARN( @" Truncated payload in line '%@' (payloadIndex=%lu, count=%lu)", line, (unsigned long)payloadIndex, (unsigned long)bytesInLine.count );
+            continue;
+        }
         NSUInteger payloadLength = bytesInLine.count - payloadIndex - 1; // last byte is checksum
         NSRange payloadRange = NSMakeRange(payloadIndex, payloadLength);
         NSArray<NSNumber*>* payload = [bytesInLine subarrayWithRange:payloadRange];

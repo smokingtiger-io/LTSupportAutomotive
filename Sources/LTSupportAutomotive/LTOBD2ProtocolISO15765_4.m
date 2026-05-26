@@ -76,7 +76,12 @@
     for ( NSString* line in lines )
     {
         NSArray<NSNumber*>* bytesInLine = [self hexStringToArrayOfNumbers:line];
-        if ( bytesInLine.count < 3 )
+        // headerLength = addressParts + 1 (PCI), so we need at least
+        // that many bytes to safely read address and pci. 29-bit CAN
+        // headers need 4 address bytes + PCI = 5 — previous guard
+        // (< 3) was inherited from the 11-bit case and let short 29-bit
+        // lines crash on bytesInLine[addressIndex].
+        if ( bytesInLine.count < headerLength )
         {
             WARN( @" Invalid or short line '%@' found", line );
             continue;
@@ -120,6 +125,11 @@
         NSUInteger originalCommandCorrective = ( isSingleFrame || isFirstFrameOfMultiple ) ? numberOfBytesInCommand : 0;
 
         NSUInteger payloadIndex = headerLength + originalCommandCorrective + multiFrameCorrective;
+        if ( payloadIndex > bytesInLine.count )
+        {
+            WARN( @" Truncated payload in line '%@' (payloadIndex=%lu, count=%lu)", line, (unsigned long)payloadIndex, (unsigned long)bytesInLine.count );
+            continue;
+        }
         NSUInteger payloadLength = bytesInLine.count - payloadIndex;
         NSRange payloadRange = NSMakeRange(payloadIndex, payloadLength);
         NSArray<NSNumber*>* payload = [bytesInLine subarrayWithRange:payloadRange];
