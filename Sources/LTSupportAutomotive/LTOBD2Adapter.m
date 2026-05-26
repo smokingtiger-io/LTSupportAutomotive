@@ -164,6 +164,16 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
         @"OBD2AdapterStateGone",
     };
 
+    // Bounds-check before indexing. The enum is currently 0..10 but
+    // adding a new state without updating this table would otherwise
+    // be silent out-of-bounds memory read — and arbitrary memory
+    // corruption / EXC_BAD_ACCESS if the value ever drifts past the
+    // table length for any reason.
+    NSUInteger count = sizeof(states) / sizeof(states[0]);
+    if ( _adapterState >= count )
+    {
+        return [NSString stringWithFormat:@"OBD2AdapterState(%lu)", (unsigned long)_adapterState];
+    }
     return states[_adapterState];
 }
 
