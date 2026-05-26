@@ -387,26 +387,54 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 
 -(void)peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(NSError *)error
 {
+    if ( error )
+    {
+        LOG( @"Could not discover characteristics for service %@: %@", service, error );
+        // Treat the service as resolved-but-empty so the
+        // anyServicePending check below can still terminate; the
+        // success/failure decision falls through to the existing
+        // _reader/_writer test.
+    }
+
+    // Prefer pairing notify + write within the same service. Adapters
+    // that expose multiple services (e.g. a custom vendor service plus
+    // the standard nordic UART service) can otherwise end up with a
+    // _reader from one service and a _writer from another, which on
+    // some controllers silently never delivers data.
+    CBCharacteristic* localReader = nil;
+    CBCharacteristic* localWriter = nil;
     for ( CBCharacteristic* characteristic in service.characteristics )
     {
-        if ( characteristic.properties & CBCharacteristicPropertyNotify )
+        if ( !localReader && ( characteristic.properties & CBCharacteristicPropertyNotify ) )
         {
             LOG( @"Did see notify characteristic" );
-            _reader = characteristic;
-
-            //[peripheral readValueForCharacteristic:characteristic];
-            [peripheral setNotifyValue:YES forCharacteristic:characteristic];
+            localReader = characteristic;
         }
-
         // Accept either Write (with response) or WriteWithoutResponse —
         // a non-trivial subset of BLE OBD adapters expose only the
         // latter. The actual writeValue:type: call selects the matching
         // type, see LTBTLEWriteCharacteristicStream.
-        if ( characteristic.properties & ( CBCharacteristicPropertyWrite | CBCharacteristicPropertyWriteWithoutResponse ) )
+        if ( !localWriter && ( characteristic.properties & ( CBCharacteristicPropertyWrite | CBCharacteristicPropertyWriteWithoutResponse ) ) )
         {
             LOG( @"Did see write characteristic" );
-            _writer = characteristic;
+            localWriter = characteristic;
         }
+    }
+
+    if ( localReader && localWriter )
+    {
+        _reader = localReader;
+        _writer = localWriter;
+        [peripheral setNotifyValue:YES forCharacteristic:localReader];
+    }
+    else if ( localReader && !_reader )
+    {
+        _reader = localReader;
+        [peripheral setNotifyValue:YES forCharacteristic:localReader];
+    }
+    else if ( localWriter && !_writer )
+    {
+        _writer = localWriter;
     }
 
     // Wait until all requested services have reported back before
