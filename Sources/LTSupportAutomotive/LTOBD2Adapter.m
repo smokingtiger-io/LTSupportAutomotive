@@ -36,6 +36,7 @@ static NSString* const COMMAND_TERMINATION_SEQUENCE = @"\r"; // CR (0x0D)
 
 @property(strong,nonatomic,readonly) LTOBD2Command* command;
 @property(strong,nonatomic,readonly) LTOBD2CommandResponseHandler responseHandler;
+@property(assign,nonatomic) NSUInteger sendRetryCount;
 
 @end
 
@@ -844,6 +845,7 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     _hasPendingAnswer = YES;
     if ( [self sendCommand:internalCommand.command] )
     {
+        internalCommand.sendRetryCount = 0;
         [internalCommand commandSent];
         LTPostNotificationOnMain( LTOBD2AdapterDidSend, self );
         [self startCommandTimeoutTimer];
@@ -851,14 +853,34 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     else
     {
         // sendCommand returned NO — typically because the output stream
-        // had no space available, or a partial write happened. The old
-        // code left _hasPendingAnswer = YES (which we set just above)
-        // and _commandQueue head still occupied, so the queue stalled
-        // permanently and the next transmit would never get scheduled.
-        // Roll back the state and re-arm processCommandQueue on a short
-        // delay so we retry once the stream has space.
+        // had no space available, or a partial write happened. Roll
+        // back the pending state so the queue is not stuck, then retry
+        // a bounded number of times. Without the budget a permanently
+        // unwritable stream (disconnected adapter, BLE gone, etc.) keeps
+        // re-arming asyncProcessCommandQueue every 50 ms forever and the
+        // command never completes from the caller's perspective.
         _hasPendingAnswer = NO;
         _receiveBuffer = nil;
+
+        static const NSUInteger kMaxSendRetries = 20; // ~1s at 50ms cadence
+        internalCommand.sendRetryCount += 1;
+        BOOL streamWritable = ( _outputStream.streamStatus == NSStreamStatusOpen
+                             || _outputStream.streamStatus == NSStreamStatusReading
+                             || _outputStream.streamStatus == NSStreamStatusWriting );
+        if ( !streamWritable || internalCommand.sendRetryCount > kMaxSendRetries )
+        {
+            WARN( @"sendCommand giving up after %lu retries (streamStatus=%lu): %@",
+                  (unsigned long)internalCommand.sendRetryCount,
+                  (unsigned long)_outputStream.streamStatus,
+                  internalCommand.command );
+            [_commandQueue removeObject:internalCommand];
+            [internalCommand didCompleteResponse:@[ RESPONSE_FINAL_NODATA ] protocol:nil protocolType:OBD2VehicleProtocolUnknown];
+            // Continue draining the queue rather than letting a single
+            // dropped command stall everything that came after it.
+            [self asyncProcessCommandQueue];
+            return;
+        }
+
         dispatch_after(
             dispatch_time( DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC) ),
             _dispatchQueue,
