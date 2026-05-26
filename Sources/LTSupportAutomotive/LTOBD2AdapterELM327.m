@@ -5,7 +5,7 @@
 
 #import "helpers.h"
 
-#define DEBUG_THIS_FILE
+//#define DEBUG_THIS_FILE
 
 #ifdef DEBUG_THIS_FILE
     #define XLOG LOG
