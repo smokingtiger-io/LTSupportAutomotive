@@ -95,7 +95,12 @@ typedef NSDictionary<NSString*,NSArray<NSString*>*> RequestResponseDictionary;
 
     _requestResponseDictionary = [NSDictionary dictionaryWithDictionary:md];
 
-    [self advanceAdapterStateTo:OBD2AdapterStateConnected];
+    // The connect path advances to Present right after this populate
+    // call, which triggers the inherited ELM327 init sequence. That
+    // init sequence eventually walks the state machine to Connected on
+    // its own through the simulated responses. Advancing to Connected
+    // here first would force a backwards transition Present → Initializing
+    // → ... and re-run init.
 }
 
 #pragma mark -
