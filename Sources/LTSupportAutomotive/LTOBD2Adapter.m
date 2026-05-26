@@ -261,8 +261,15 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
 -(void)disconnect
 {
-    [_heartbeatTimer invalidate];
-    _heartbeatTimer = nil;
+    // _heartbeatTimer was created on the main runloop in
+    // launchHeartbeatIfNecessary, and NSTimer mandates that invalidate
+    // run on the runloop the timer is scheduled to. Marshal back to
+    // main so we don't leak the timer when disconnect runs from
+    // dispatch_queue / a deallocator on another queue.
+    dispatch_async( dispatch_get_main_queue(), ^{
+        [self->_heartbeatTimer invalidate];
+        self->_heartbeatTimer = nil;
+    });
 
     [self cancelCommandTimeoutTimer];
 
@@ -763,12 +770,19 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
 -(void)launchHeartbeatIfNecessary
 {
-    if ( _adapterProtocol.heartbeatCommand )
+    if ( !_adapterProtocol.heartbeatCommand )
     {
-        dispatch_async( dispatch_get_main_queue(), ^{
-            self->_heartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:4.5 target:self selector:@selector(sendHeartbeatCommand:) userInfo:nil repeats:YES];
-        } );
+        return;
     }
+    // NSTimer requires a runloop, and the only runloop we can rely on
+    // is the main one. Invalidate any prior timer (a reconnect can
+    // call this path twice without an intervening disconnect) before
+    // creating the new one — without that guard we'd leak the prior
+    // timer and double the heartbeat rate.
+    dispatch_async( dispatch_get_main_queue(), ^{
+        [self->_heartbeatTimer invalidate];
+        self->_heartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:4.5 target:self selector:@selector(sendHeartbeatCommand:) userInfo:nil repeats:YES];
+    });
 }
 
 -(void)processCommandQueue
