@@ -228,8 +228,14 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
     }
     if ( !peripherals.count )
     {
-        // some devices are not advertising the service ID, hence we need to scan for all services
-        [_manager scanForPeripheralsWithServices:nil options:nil];
+        // Scan filtered by the requested service UUIDs so the
+        // transporter does not connect to every advertising BLE
+        // peripheral within range. Adapters that hide their service
+        // UUID from the advertisement payload (some clones) need
+        // identifier-based reconnect through retrievePeripheralsWithIdentifiers
+        // above; an open scan would otherwise spray connect attempts
+        // at unrelated speakers, fitness bands, etc.
+        [_manager scanForPeripheralsWithServices:_serviceUUIDs options:nil];
         return;
     }
 
@@ -245,6 +251,29 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
     {
         LOG( @"[IGNORING] DISCOVER %@ (RSSI=%@) w/ advertisement %@", peripheral, RSSI, advertisementData );
         return;
+    }
+
+    // Confirm the advertisement actually overlaps with _serviceUUIDs
+    // before issuing a connect. CoreBluetooth applies the scan filter
+    // best-effort, but at least on some iOS releases it still delivers
+    // peripherals whose advertised services do not match the filter.
+    NSArray<CBUUID*>* advertisedUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey];
+    if ( _serviceUUIDs.count && advertisedUUIDs.count )
+    {
+        BOOL anyOverlap = NO;
+        for ( CBUUID* uuid in advertisedUUIDs )
+        {
+            if ( [_serviceUUIDs containsObject:uuid] )
+            {
+                anyOverlap = YES;
+                break;
+            }
+        }
+        if ( !anyOverlap )
+        {
+            LOG( @"[IGNORING] DISCOVER %@ — advertised %@ does not overlap requested %@", peripheral, advertisedUUIDs, _serviceUUIDs );
+            return;
+        }
     }
 
     LOG( @"DISCOVER %@ (RSSI=%@) w/ advertisement %@", peripheral, RSSI, advertisementData );
