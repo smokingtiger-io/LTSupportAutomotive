@@ -452,7 +452,7 @@ typedef enum : NSUInteger {
 
 @end
 
-@interface LTOBD2PID_ABSOLUTE_ENGINE_LOAD_43 : LTOBD2PIDSingleBytePercent
+@interface LTOBD2PID_ABSOLUTE_ENGINE_LOAD_43 : LTOBD2PID
 
 +(instancetype)pid NS_UNAVAILABLE;
 

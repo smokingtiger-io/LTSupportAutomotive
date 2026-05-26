@@ -1452,6 +1452,13 @@
 @end
 
 @implementation LTOBD2PID_ABSOLUTE_ENGINE_LOAD_43
+
+-(NSString*)formattedResponse
+{
+    // Spec: ((A*256) + B) * 100 / 255  %, range 0..25700%.
+    return [self formatTwoByteDoubleValueWithString:@"%.1f" UTF8_NARROW_NOBREAK_SPACE @"%%" offset:0 factor:100 / 255.0];
+}
+
 @end
 
 @implementation LTOBD2PID_AIR_FUEL_EQUIV_RATIO_44
