@@ -1545,6 +1545,10 @@
 -(NSString*)formattedResponse
 {
     NSArray<NSNumber*>* bytes = [self anyResponseWithMinimumLength:4];
+    if ( !bytes )
+    {
+        return OBD2_NO_DATA;
+    }
 
     uint A = bytes[0].unsignedIntValue;
     return [NSString stringWithFormat:@"%d", A];
@@ -1557,6 +1561,10 @@
 -(NSString*)formattedResponse
 {
     NSArray<NSNumber*>* bytes = [self anyResponseWithMinimumLength:4];
+    if ( !bytes )
+    {
+        return OBD2_NO_DATA;
+    }
 
     uint B = bytes[1].unsignedIntValue;
     return [NSString stringWithFormat:@"%d" UTF8_NARROW_NOBREAK_SPACE @"V", B];
@@ -1569,6 +1577,10 @@
 -(NSString*)formattedResponse
 {
     NSArray<NSNumber*>* bytes = [self anyResponseWithMinimumLength:4];
+    if ( !bytes )
+    {
+        return OBD2_NO_DATA;
+    }
 
     uint C = bytes[2].unsignedIntValue;
     return [NSString stringWithFormat:@"%d" UTF8_NARROW_NOBREAK_SPACE @"mA", C];
@@ -1581,6 +1593,10 @@
 -(NSString*)formattedResponse
 {
     NSArray<NSNumber*>* bytes = [self anyResponseWithMinimumLength:4];
+    if ( !bytes )
+    {
+        return OBD2_NO_DATA;
+    }
 
     uint D = bytes[3].unsignedIntValue;
     return [NSString stringWithFormat:@"%d" UTF8_NARROW_NOBREAK_SPACE @"kPa", 10 * D];
@@ -1593,6 +1609,10 @@
 -(NSString*)formattedResponse
 {
     NSArray<NSNumber*>* bytes = [self anyResponseWithMinimumLength:4];
+    if ( !bytes )
+    {
+        return OBD2_NO_DATA;
+    }
 
     uint A = bytes[0].unsignedIntValue;
     return [NSString stringWithFormat:@"%d" UTF8_NARROW_NOBREAK_SPACE @"g/s", 10 * A];
@@ -1707,16 +1727,22 @@
 - (NSString *)formattedResponse
 {
     NSArray<NSNumber*>* bytes = [self anyResponseWithMinimumLength:4];
+    if ( !bytes )
+    {
+        return OBD2_NO_DATA;
+    }
 
     // see: https://en.wikipedia.org/wiki/OBD-II_PIDs#Service_01
     // (A(2^24) + B(2^16) + C(2^8) + D) / 10
-    
+
     uint A = bytes[0].unsignedIntValue;
     uint B = bytes[1].unsignedIntValue;
     uint C = bytes[2].unsignedIntValue;
     uint D = bytes[3].unsignedIntValue;
-    
-    const double km = ((A << 24) + (B << 16) + (C << 8) + D) / 10;
+
+    // Divide as double — integer division was dropping the 100m
+    // component of every reading.
+    const double km = ((A << 24) + (B << 16) + (C << 8) + D) / 10.0;
     return [NSString stringWithFormat:@"%0.2f" UTF8_NARROW_NOBREAK_SPACE @"km", km];
 }
 
