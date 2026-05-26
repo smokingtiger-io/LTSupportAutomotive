@@ -123,17 +123,17 @@ typedef enum : NSUInteger {
 @property(strong,nonatomic,readonly) NSString* name;
 @property(strong,nonatomic,readonly) NSString* unit;
 @property(assign,nonatomic,readonly) double multiplier;
-@property(assign,nonatomic,readonly) NSInteger constant;
+@property(assign,nonatomic,readonly) double constant;
 @property(assign,nonatomic,readonly) BOOL s;
 @property(strong,nonatomic,readonly) NSString* formatString;
 
-+(instancetype)unitAndScalingObjectWithName:(NSString*)name unit:(NSString*)unit multiplier:(double)multiplier constant:(NSInteger)constant s:(BOOL)s;
++(instancetype)unitAndScalingObjectWithName:(NSString*)name unit:(NSString*)unit multiplier:(double)multiplier constant:(double)constant s:(BOOL)s;
 
 @end
 
 @implementation OBD2Mode6UnitAndScalingObject
 
-+(instancetype)unitAndScalingObjectWithName:(NSString*)name unit:(NSString*)unit multiplier:(double)multiplier constant:(NSInteger)constant s:(BOOL)s
++(instancetype)unitAndScalingObjectWithName:(NSString*)name unit:(NSString*)unit multiplier:(double)multiplier constant:(double)constant s:(BOOL)s
 {
     OBD2Mode6UnitAndScalingObject* obj = [[self alloc] init];
     obj->_name = name;
