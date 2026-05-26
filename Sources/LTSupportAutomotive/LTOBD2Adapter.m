@@ -407,11 +407,23 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     [internalCommand didCompleteResponse:lines protocol:_adapterProtocol protocolType:_vehicleProtocol];
     _hasPendingAnswer = NO;
 
-    if ( _nextCommandDelay )
+    // Previously this used `[NSThread sleepForTimeInterval:]` which froze
+    // _dispatchQueue for the entire delay window, holding back every
+    // other enqueue/process the queue had to do. Switch to a
+    // dispatch_after that defers the next processCommandQueue without
+    // blocking the queue thread.
+    if ( _nextCommandDelay > 0 )
     {
-        [NSThread sleepForTimeInterval:_nextCommandDelay];
+        dispatch_after(
+            dispatch_time( DISPATCH_TIME_NOW, (int64_t)(_nextCommandDelay * NSEC_PER_SEC) ),
+            _dispatchQueue,
+            ^{ [self asyncProcessCommandQueue]; }
+        );
     }
-    [self processCommandQueue];
+    else
+    {
+        [self processCommandQueue];
+    }
 }
 
 -(void)didRecognizeProtocol:(OBD2VehicleProtocol)protocol
