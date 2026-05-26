@@ -276,14 +276,14 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
     // Unschedule on the same shared thread the streams were scheduled on
     // to avoid the assertion CFRunLoop logs when releasing a stream
-    // from a different runloop than the one it was attached to.
+    // from a different runloop than the one it was attached to. The
+    // ivars are cleared inside the perform target so close/remove see
+    // live stream objects; clearing them here would race the perform
+    // and leak the streams.
     [self performSelector:@selector(unscheduleStreamsOnSharedRunloop)
                  onThread:[LTOBD2Adapter sharedStreamThread]
                withObject:nil
             waitUntilDone:NO];
-
-    _inputStream = nil;
-    _outputStream = nil;
 
     [_logFile closeFile];
     _logFile = nil;
@@ -295,6 +295,8 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     [_inputStream removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
     [_outputStream close];
     [_outputStream removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+    _inputStream = nil;
+    _outputStream = nil;
 }
 
 #pragma mark -
