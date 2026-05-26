@@ -823,6 +823,23 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
         LTPostNotificationOnMain( LTOBD2AdapterDidSend, self );
         [self startCommandTimeoutTimer];
     }
+    else
+    {
+        // sendCommand returned NO — typically because the output stream
+        // had no space available, or a partial write happened. The old
+        // code left _hasPendingAnswer = YES (which we set just above)
+        // and _commandQueue head still occupied, so the queue stalled
+        // permanently and the next transmit would never get scheduled.
+        // Roll back the state and re-arm processCommandQueue on a short
+        // delay so we retry once the stream has space.
+        _hasPendingAnswer = NO;
+        _receiveBuffer = nil;
+        dispatch_after(
+            dispatch_time( DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC) ),
+            _dispatchQueue,
+            ^{ [self asyncProcessCommandQueue]; }
+        );
+    }
 }
 
 -(void)asyncEnqueueInternalCommand:(LTOBD2AdapterInternalCommand*)internalCommand
