@@ -37,3 +37,15 @@ NSString* LTDataToString( NSData* d )
     NSString* s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
     return [[s stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"] stringByReplacingOccurrencesOfString:@"\r" withString:@"\\r"];
 }
+
+void LTPostNotificationOnMain( NSString* name, id object )
+{
+    if ( [NSThread isMainThread] )
+    {
+        [[NSNotificationCenter defaultCenter] postNotificationName:name object:object];
+        return;
+    }
+    dispatch_async( dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:name object:object];
+    });
+}

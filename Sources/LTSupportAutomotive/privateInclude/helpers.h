@@ -10,6 +10,13 @@ NSString* LTStringLookupWithPlaceholder( NSString* key, NSString* placeholder );
 void MyNSLog(const char *file, int lineNumber, const char *functionName, NSString *format, ...);
 NSString* LTDataToString( NSData* d );
 
+// Posts an NSNotification onto the main queue regardless of the calling
+// thread. NSNotificationCenter delivers synchronously on the posting
+// thread, and large parts of this library run on BLE / dispatch /
+// stream threads — so naive postNotificationName: would deliver to UI
+// observers on a background thread. Always main-marshal these.
+void LTPostNotificationOnMain( NSString* name, id _Nullable object );
+
 NS_ASSUME_NONNULL_END
 
 // global macros

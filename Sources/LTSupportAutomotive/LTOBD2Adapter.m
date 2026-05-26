@@ -378,7 +378,7 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
     XLOG( @"Adapter state '%@' => '%@'", oldState, newState );
 
-    [[NSNotificationCenter defaultCenter] postNotificationName:LTOBD2AdapterDidUpdateState object:self];
+    LTPostNotificationOnMain( LTOBD2AdapterDidUpdateState, self );
 
     if ( _adapterState == OBD2AdapterStatePresent )
     {
@@ -455,7 +455,7 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 {
     [self cancelCommandTimeoutTimer];
 
-    [[NSNotificationCenter defaultCenter] postNotificationName:LTOBD2AdapterDidReceive object:self];
+    LTPostNotificationOnMain( LTOBD2AdapterDidReceive, self );
 
     if ( !_hasPendingAnswer )
     {
@@ -654,7 +654,7 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
     if ( eventCode == NSStreamEventOpenCompleted )
     {
-        [[NSNotificationCenter defaultCenter] postNotificationName:LTOBD2AdapterDidOpenStream object:stream];
+        LTPostNotificationOnMain( LTOBD2AdapterDidOpenStream, stream );
     }
 
     if ( stream == _inputStream )
@@ -796,7 +796,7 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
     if ( [self sendCommand:internalCommand.command] )
     {
         [internalCommand commandSent];
-        [[NSNotificationCenter defaultCenter] postNotificationName:LTOBD2AdapterDidSend object:self];
+        LTPostNotificationOnMain( LTOBD2AdapterDidSend, self );
         [self startCommandTimeoutTimer];
     }
 }

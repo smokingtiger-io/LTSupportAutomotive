@@ -250,7 +250,7 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
     }
 
     _signalStrength = RSSI;
-    [[NSNotificationCenter defaultCenter] postNotificationName:LTBTLESerialTransporterDidUpdateSignalStrength object:self];
+    LTPostNotificationOnMain( LTBTLESerialTransporterDidUpdateSignalStrength, self );
 }
 
 -(void)peripheral:(CBPeripheral *)peripheral didDiscoverServices:(NSError *)error
