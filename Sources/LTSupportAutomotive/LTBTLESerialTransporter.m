@@ -120,17 +120,34 @@ NSString* const LTBTLESerialTransporterDidUpdateSignalStrength = @"LTBTLESerialT
 {
     [self stopUpdatingSignalStrength];
 
+    if ( _manager.isScanning )
+    {
+        [_manager stopScan];
+    }
+
     [_inputStream close];
     [_outputStream close];
+    _inputStream = nil;
+    _outputStream = nil;
 
     if ( _adapter )
     {
         [_manager cancelPeripheralConnection:_adapter];
+        _adapter = nil;
     }
 
     [_possibleAdapters enumerateObjectsUsingBlock:^(CBPeripheral * _Nonnull peripheral, NSUInteger idx, BOOL * _Nonnull stop) {
         [self->_manager cancelPeripheralConnection:peripheral];
     }];
+    [_possibleAdapters removeAllObjects];
+
+    _reader = nil;
+    _writer = nil;
+
+    // Drop the completion block so a late delegate callback after
+    // disconnect (e.g. didDisconnectPeripheral arriving asynchronously)
+    // cannot resurrect an old connect attempt.
+    _connectionBlock = nil;
 }
 
 -(void)startUpdatingSignalStrengthWithInterval:(NSTimeInterval)interval
