@@ -144,7 +144,27 @@ NSString* const LTOBD2AdapterDidReceive = @"LTOBD2AdapterDidReceive";
 
 -(void)dealloc
 {
-    [self disconnect];
+    // Do NOT call -disconnect here. -disconnect queues async work
+    // (dispatch_async to main, performSelector:onThread:) that captures
+    // self; queuing those during dealloc tries to retain a deallocating
+    // object, which the runtime turns into a no-op retain. The
+    // invocations then fire on freed memory and crash on the stream
+    // thread inside -unscheduleStreamsOnSharedRunloop. Callers must
+    // invoke -disconnect explicitly before releasing the adapter (the
+    // Swift session holders in Stututu do this when swapping or
+    // clearing the active adapter).
+    //
+    // As a defensive fallback for callers that forget, synchronously
+    // close any still-live streams so the OS releases the socket fd /
+    // BLE characteristic backing the stream. We deliberately skip
+    // removeFromRunLoop: — that requires marshalling onto the stream
+    // thread (which would re-introduce the resurrection bug), and a
+    // closed stream that's about to be ARC-released will no longer
+    // fire callbacks even if it's still nominally attached to a
+    // runloop.
+    [_inputStream close];
+    [_outputStream close];
+    [_logFile closeFile];
 }
 
 #pragma mark -
